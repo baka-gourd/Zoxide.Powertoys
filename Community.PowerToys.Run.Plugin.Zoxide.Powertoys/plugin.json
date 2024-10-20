@@ -1,0 +1,14 @@
+{
+  "ID": "477BD4818E6134BCB38BB543A7B1E2EE",
+  "ActionKeyword": "z",
+  "IsGlobal": false,
+  "Name": "Zoxide",
+  "Author": "baka-gourd",
+  "Version": "0.0.1",
+  "Language": "csharp",
+  "Website": "https://github.com/hlaueriksson/Community.PowerToys.Run.Plugin.Zoxide.Powertoys",
+  "ExecuteFileName": "Community.PowerToys.Run.Plugin.Zoxide.Powertoys.dll",
+  "IcoPathDark": "Images\\zoxide.powertoys.dark.png",
+  "IcoPathLight": "Images\\zoxide.powertoys.light.png",
+  "DynamicLoading": false
+}
