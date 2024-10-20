@@ -1,0 +1,1 @@
+# Zoxide.Powertoys
