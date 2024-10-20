@@ -1,9 +1,20 @@
 using ManagedCommon;
+
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Windows;
 using System.Windows.Input;
+
 using Wox.Plugin;
+
+using SimpleExec;
+
+using System.Linq;
+
+using Wox.Plugin.Logger;
+
+using System.Diagnostics;
 
 namespace Community.PowerToys.Run.Plugin.Zoxide.Powertoys;
 
@@ -33,6 +44,8 @@ public class Main : IPlugin, IContextMenu, IDisposable
 
     private bool Disposed { get; set; }
 
+    private string ZoxidePath { get; set; }
+
     /// <summary>
     /// Return a filtered list, based on the given query.
     /// </summary>
@@ -42,21 +55,81 @@ public class Main : IPlugin, IContextMenu, IDisposable
     {
         var search = query.Search;
 
+        if (ZoxidePath is null)
+        {
+            return
+            [
+                new Result
+                {
+                    QueryTextDisplay = search,
+                    IcoPath = IconPath,
+                    Title = "Error: Cannot find zoxide",
+                    SubTitle = "Error: Cannot find zoxide",
+                    ToolTipData = new ToolTipData("Error", "Cannot find zoxide"),
+                    Action = _ => true,
+                    ContextData = search,
+                }
+            ];
+        }
+
+        string output, error;
+
+        try
+        {
+            (output, error) = Command.ReadAsync(ZoxidePath, ["query", search]).Result;
+        }
+        catch (AggregateException e)
+        {
+            return
+            [
+                new Result
+                {
+                    QueryTextDisplay = search,
+                    IcoPath = IconPath,
+                    Title = "Error while query",
+                    SubTitle = e.InnerExceptions.First() is ExitCodeReadException ex ? ex.StandardError.Trim() : e.Message.Trim(),
+                    Action = _ =>
+                    {
+                        Clipboard.SetDataObject(e.InnerExceptions.First() is ExitCodeReadException ex2 ? ex2.StandardError.Trim() : e.Message.Trim());
+                        return true;
+                    },
+                }
+            ];
+        }
+
+        if (!(string.IsNullOrEmpty(error) || string.IsNullOrWhiteSpace(error)))
+        {
+            return
+            [
+                new Result
+                {
+                    QueryTextDisplay = search,
+                    IcoPath = IconPath,
+                    Title = "Error: zoxide",
+                    SubTitle = error,
+                    Action = _ =>
+                    {
+                        Clipboard.SetDataObject(error);
+                        return true;
+                    },
+                }
+            ];
+        }
+
+        var dir = new DirectoryInfo(output);
         return
         [
             new Result
             {
                 QueryTextDisplay = search,
                 IcoPath = IconPath,
-                Title = "Title: " + search,
-                SubTitle = "SubTitle",
-                ToolTipData = new ToolTipData("Title", "Text"),
+                Title = "Navigate to: " + dir.Name.Trim(),
+                SubTitle = "Full path: " + dir.FullName.Trim(),
                 Action = _ =>
                 {
-                    Clipboard.SetDataObject(search);
+                    Process.Start("explorer.exe", dir.FullName);
                     return true;
-                },
-                ContextData = search,
+                }
             }
         ];
     }
@@ -70,36 +143,30 @@ public class Main : IPlugin, IContextMenu, IDisposable
         Context = context ?? throw new ArgumentNullException(nameof(context));
         Context.API.ThemeChanged += OnThemeChanged;
         UpdateIconPath(Context.API.GetCurrentTheme());
+        var pathEnv = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrEmpty(pathEnv))
+        {
+            return;
+        }
+
+        const string targetFile = "zoxide.exe";
+        var zoxidePath = pathEnv
+            .Split(Path.PathSeparator)
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => Path.Combine(p, targetFile))
+            .FirstOrDefault(File.Exists);
+
+        ZoxidePath = zoxidePath;
+        Log.Info($"Current zoxide path: {ZoxidePath}", GetType());
     }
 
     /// <summary>
-    /// Return a list context menu entries for a given <see cref="Result"/> (shown at the right side of the result).
+    /// Return a list context menu entries for a given <see cref="Result"/> (shown on the right side of the result).
     /// </summary>
     /// <param name="selectedResult">The <see cref="Result"/> for the list with context menu entries.</param>
     /// <returns>A list context menu entries.</returns>
     public List<ContextMenuResult> LoadContextMenus(Result selectedResult)
     {
-        if (selectedResult.ContextData is string search)
-        {
-            return
-            [
-                new ContextMenuResult
-                {
-                    PluginName = Name,
-                    Title = "Navigate",
-                    FontFamily = "Segoe MDL2 Assets",
-                    Glyph = "\xE8C8", // Copy
-                    AcceleratorKey = Key.C,
-                    AcceleratorModifiers = ModifierKeys.Control,
-                    Action = _ =>
-                    {
-                        Clipboard.SetDataObject(search);
-                        return true;
-                    },
-                }
-            ];
-        }
-
         return [];
     }
 
@@ -129,7 +196,9 @@ public class Main : IPlugin, IContextMenu, IDisposable
         Disposed = true;
     }
 
-    private void UpdateIconPath(Theme theme) => IconPath = theme == Theme.Light || theme == Theme.HighContrastWhite ? "Images/zoxide.powertoys.light.png" : "Images/zoxide.powertoys.dark.png";
+    private void UpdateIconPath(Theme theme) => IconPath = theme is Theme.Light or Theme.HighContrastWhite
+        ? "Images/zoxide.powertoys.light.png"
+        : "Images/zoxide.powertoys.dark.png";
 
     private void OnThemeChanged(Theme currentTheme, Theme newTheme) => UpdateIconPath(newTheme);
 }
