@@ -80,6 +80,64 @@ public class Main : IPlugin, IContextMenu, IDisposable
         }
         catch (AggregateException e)
         {
+            var exceptionMessage = e.InnerExceptions.First() is ExitCodeReadException ex
+                ? ex.StandardError.Trim()
+                : e.Message.Trim();
+
+            if (exceptionMessage != "zoxide: no match found")
+            {
+                return
+                [
+                    new Result
+                    {
+                        QueryTextDisplay = search,
+                        IcoPath = IconPath,
+                        Title = "Error while query",
+                        SubTitle = exceptionMessage,
+                        Action = _ =>
+                        {
+                            Clipboard.SetDataObject(exceptionMessage);
+                            return true;
+                        },
+                    }
+                ];
+            }
+
+
+            if (Directory.Exists(search))
+            {
+                var directDirectory = new DirectoryInfo(search);
+                return
+                [
+                    new Result
+                    {
+                        QueryTextDisplay = search,
+                        IcoPath = IconPath,
+                        Title = "Navigate to: " + directDirectory.Name.Trim(),
+                        SubTitle = "Full path: " + directDirectory.FullName.Trim(),
+                        Action = _ =>
+                        {
+                            var process = new Process()
+                            {
+                                StartInfo = new ProcessStartInfo()
+                                {
+                                    FileName = "cmd.exe",
+                                    ArgumentList = {"/c", ZoxidePath, "add", directDirectory.FullName},
+                                    CreateNoWindow = true,
+                                    UseShellExecute = false,
+                                }
+                            };
+                            process.Start();
+                            process.WaitForExit();
+
+                            Process.Start("explorer.exe", directDirectory.FullName);
+                            return true;
+                        }
+                    }
+                ];
+            }
+
+
             return
             [
                 new Result
@@ -87,10 +145,10 @@ public class Main : IPlugin, IContextMenu, IDisposable
                     QueryTextDisplay = search,
                     IcoPath = IconPath,
                     Title = "Error while query",
-                    SubTitle = e.InnerExceptions.First() is ExitCodeReadException ex ? ex.StandardError.Trim() : e.Message.Trim(),
+                    SubTitle = exceptionMessage,
                     Action = _ =>
                     {
-                        Clipboard.SetDataObject(e.InnerExceptions.First() is ExitCodeReadException ex2 ? ex2.StandardError.Trim() : e.Message.Trim());
+                        Clipboard.SetDataObject(exceptionMessage);
                         return true;
                     },
                 }
@@ -127,6 +185,19 @@ public class Main : IPlugin, IContextMenu, IDisposable
                 SubTitle = "Full path: " + dir.FullName.Trim(),
                 Action = _ =>
                 {
+                    var process = new Process()
+                    {
+                        StartInfo = new ProcessStartInfo()
+                        {
+                            FileName = "cmd.exe",
+                            ArgumentList = {"/c", ZoxidePath, "add", dir.FullName},
+                            CreateNoWindow = true,
+                            UseShellExecute = false,
+                        }
+                    };
+                    process.Start();
+                    process.WaitForExit();
+
                     Process.Start("explorer.exe", dir.FullName);
                     return true;
                 }
